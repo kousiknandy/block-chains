@@ -1,4 +1,6 @@
 import java.util.ArrayList;
+import java.util.Set;
+import java.util.HashSet;
 
 public class TxHandler {
 
@@ -22,11 +24,41 @@ public class TxHandler {
      *     values; and false otherwise.
      */
     public boolean isValidTx(Transaction tx) {
-        // (1)
+	ArrayList<Transaction.Input> ips = tx.getInputs();
+	Set<UTXO> sutx = new HashSet<UTXO>();
+	double inputSum = 0, outputSum = 0;
+	for (int i = 0; i < ips.size(); i++) {
+	    Transaction.Input ip = ips.get(i);
+	    UTXO u = new UTXO(ip.prevTxHash, ip.outputIndex);
+	    if (this.pool.contains(u) == false) {
+		// (1)
+		return false;
+	    }
+	    Transaction.Output op = this.pool.getTxOutput(u);
+	    if (Crypto.verifySignature(op.address, tx.getRawDataToSign(i),
+				       ip.signature) == false) {
+		// (2)
+		return false;
+	    }
+	    if (sutx.contains(u)) {
+		// (3)
+		return false;
+	    }
+	    sutx.add(u);
+	    inputSum += op.value;
+	}
 	ArrayList<Transaction.Output> ops = tx.getOutputs();
 	for (int i = 0; i < ops.size(); i++) {
-	    Transaction.Output o = ops.get(i);
-	    
+	    Transaction.Output op = ops.get(i);
+	    if (op.value < 0) {
+		// (4)
+		return false;
+	    }
+	    outputSum += op.value;
+	}
+	if (outputSum > inputSum) {
+	    // (5)
+	    return false;
 	}
 	return true;
     }
@@ -37,8 +69,27 @@ public class TxHandler {
      * updating the current UTXO pool as appropriate.
      */
     public Transaction[] handleTxs(Transaction[] possibleTxs) {
-        // IMPLEMENT THIS
-	return null;
+        Set<Transaction> valids = new HashSet<>();
+	Transaction tx;
+	for (int i = 0; i < possibleTxs.length; i++) {
+	    tx = possibleTxs[i];
+	    if (isValidTx(tx) == false) continue;
+	    valids.add(tx);
+	    ArrayList<Transaction.Input> ips = tx.getInputs();
+	    for (int j = 0; j < ips.size(); j++) {
+		Transaction.Input ip = ips.get(j);
+		UTXO u = new UTXO(ip.prevTxHash, ip.outputIndex);
+		this.pool.removeUTXO(u);
+	    }
+	    ArrayList<Transaction.Output> ops = tx.getOutputs();
+	    for (int j = 0; j < ops.size(); j++) {
+		Transaction.Output op = ops.get(j);
+		UTXO u = new UTXO(tx.getHash(), j);
+		this.pool.addUTXO(u, op);
+	    }
+	}
+	Transaction[] validTxArray = new Transaction[valids.size()];
+        return valids.toArray(validTxArray);
     }
 
 }
