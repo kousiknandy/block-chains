@@ -42,7 +42,7 @@ public class BlockChain {
         txPool = new TransactionPool();
         UTXOPool utxoPool = new UTXOPool();
         byte[] prevBlockHash = genesisBlock.getPrevBlockHash();
-        if (prevBlockHash == null) return;
+        if (prevBlockHash != null) return;
         coinBase2utxoPool(genesisBlock, utxoPool);
         BlockNode genesisBlockNode = new BlockNode(genesisBlock,
                                                    null,
@@ -55,6 +55,7 @@ public class BlockChain {
     private void coinBase2utxoPool(Block block, UTXOPool utxoPool) {
         int i = 0;
         Transaction cb = block.getCoinbase();
+        txPool.addTransaction(cb);
         for (Transaction.Output op: cb.getOutputs()) {
             UTXO utxo = new UTXO(cb.getHash(), i++);
             utxoPool.addUTXO(utxo, op);
@@ -89,8 +90,28 @@ public class BlockChain {
      * @return true if block is successfully added
      */
     public boolean addBlock(Block block) {
-        // IMPLEMENT THIS
-        return false;
+        System.out.print("1 " + block + " ");
+        if (block == null || block.getPrevBlockHash() == null) return false;
+        System.out.print("2 ");
+        ByteArrayWrapper parentBlockId = new ByteArrayWrapper(block.getPrevBlockHash());
+        BlockNode parentNode = theChain.get(parentBlockId);
+        if (parentNode == null) return false;
+        System.out.print("3 " + parentNode + " ");
+        if (parentNode.height < nodeMaxHeight.height - CUT_OFF_AGE) return false;
+        System.out.print("4 ");
+        TxHandler handler = new TxHandler(new UTXOPool(parentNode.utxoPool));
+        for (Transaction tX: block.getTransactions()) {
+            System.out.print("5 " + tX);
+            if (handler.isValidTx(tX) == false) return false;
+        }
+        System.out.print("6 ");
+        UTXOPool utxoPool = handler.getUTXOPool();
+        coinBase2utxoPool(block, utxoPool);
+        BlockNode node = new BlockNode(block, parentNode, utxoPool);
+        theChain.put(new ByteArrayWrapper(block.getHash()), node);
+        if (node.height > nodeMaxHeight.height) nodeMaxHeight = node;
+        System.out.println("7 ");
+        return true;
     }
 
     /** Add a transaction to the transaction pool */
