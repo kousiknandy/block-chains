@@ -2,33 +2,78 @@
 // You should not have all the blocks added to the block chain in memory 
 // as it would cause a memory overflow.
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 public class BlockChain {
+
+    private class BlockNode {
+        Block block;
+        BlockNode parent;
+        List<BlockNode> children;
+        UTXOPool utxoPool;
+        int height;
+
+        public BlockNode(Block block, BlockNode parent, UTXOPool utxoPool) {
+            this.block = block;
+            this.parent = parent;
+            this.utxoPool = utxoPool;
+            this.height = parent != null ? parent.height + 1 : 1;
+            this.children = new ArrayList<>();
+            if (parent != null) {
+                parent.children.add(this);
+            }
+        }
+    }
+
     public static final int CUT_OFF_AGE = 10;
+    private HashMap<ByteArrayWrapper, BlockNode> theChain;
+    private TransactionPool txPool;
+    private BlockNode nodeMaxHeight;
 
     /**
      * create an empty block chain with just a genesis block. Assume {@code genesisBlock} is a valid
      * block
      */
     public BlockChain(Block genesisBlock) {
-        // IMPLEMENT THIS
+        theChain = new HashMap<>();
+        txPool = new TransactionPool();
+        UTXOPool utxoPool = new UTXOPool();
+        byte[] prevBlockHash = genesisBlock.getPrevBlockHash();
+        if (prevBlockHash == null) return;
+        coinBase2utxoPool(genesisBlock, utxoPool);
+        BlockNode genesisBlockNode = new BlockNode(genesisBlock,
+                                                   null,
+                                                   utxoPool);
+        ByteArrayWrapper blockId = new ByteArrayWrapper(genesisBlock.getHash());
+        theChain.put(blockId, genesisBlockNode);
+        nodeMaxHeight = genesisBlockNode;
+    }
+
+    private void coinBase2utxoPool(Block block, UTXOPool utxoPool) {
+        int i = 0;
+        Transaction cb = block.getCoinbase();
+        for (Transaction.Output op: cb.getOutputs()) {
+            UTXO utxo = new UTXO(cb.getHash(), i++);
+            utxoPool.addUTXO(utxo, op);
+        }
     }
 
     /** Get the maximum height block */
     public Block getMaxHeightBlock() {
-        // IMPLEMENT THIS
-        return null;
+        return nodeMaxHeight.block;
     }
 
     /** Get the UTXOPool for mining a new block on top of max height block */
     public UTXOPool getMaxHeightUTXOPool() {
-        // IMPLEMENT THIS
-        return null;
+        return new UTXOPool(nodeMaxHeight.utxoPool);
     }
 
     /** Get the transaction pool to mine a new block */
     public TransactionPool getTransactionPool() {
-        // IMPLEMENT THIS
-        return null;
+        return txPool;
     }
 
     /**
@@ -50,6 +95,6 @@ public class BlockChain {
 
     /** Add a transaction to the transaction pool */
     public void addTransaction(Transaction tx) {
-        // IMPLEMENT THIS
+        txPool.addTransaction(tx);
     }
 }
